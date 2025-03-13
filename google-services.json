@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "678486496496",
+    "project_id": "kitab-1ec2b",
+    "storage_bucket": "kitab-1ec2b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:678486496496:android:6052f7e9d79455255ade35",
+        "android_client_info": {
+          "package_name": "com.seifelfayoumy.kitab"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "678486496496-575rff4q3f0s7cetvetpnkuvb9ge46l7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBOOCTcbTr162cvfSLlfhwA_k5mMaJPS-Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "678486496496-575rff4q3f0s7cetvetpnkuvb9ge46l7.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "678486496496-3td8npji90k790jp6e7k2jqvc5vilb42.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.seifelfayoumy.kitab"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
