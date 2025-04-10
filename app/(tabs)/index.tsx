@@ -1,74 +1,276 @@
-import { Image, StyleSheet, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, TextInput, View, FlatList, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { Colors } from '@/constants/Colors';
+import { useColorScheme } from '@/hooks/useColorScheme';
+
+// Define Book type
+type Book = {
+  id: string;
+  title: string;
+  author: string;
+  coverUrl: string;
+};
 
 export default function HomeScreen() {
+  const colorScheme = useColorScheme();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<Book[]>([]);
+  const [trendingBooks, setTrendingBooks] = useState<Book[]>([]);
+  const [isLoadingTrending, setIsLoadingTrending] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch trending books on component mount
+  useEffect(() => {
+    fetchTrendingBooks();
+  }, []);
+
+  // Function to fetch trending books from Google Books API
+  const fetchTrendingBooks = async () => {
+    setIsLoadingTrending(true);
+    setError(null);
+    
+    try {
+      // Fetch popular books (using "subject:fiction" as an example)
+      const response = await fetch(
+        'https://www.googleapis.com/books/v1/volumes?q=subject:fiction&orderBy=relevance&maxResults=20'
+      );
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch trending books');
+      }
+      
+      const data = await response.json();
+      
+      if (data.items && Array.isArray(data.items)) {
+        const books: Book[] = data.items.map((item: any) => ({
+          id: item.id,
+          title: item.volumeInfo.title || 'Unknown Title',
+          author: item.volumeInfo.authors ? item.volumeInfo.authors[0] : 'Unknown Author',
+          coverUrl: item.volumeInfo.imageLinks?.thumbnail || 'https://via.placeholder.com/128x192?text=No+Cover',
+        }));
+        
+        setTrendingBooks(books);
+      } else {
+        setTrendingBooks([]);
+      }
+    } catch (err) {
+      console.error('Error fetching trending books:', err);
+      setError('Failed to load trending books. Please try again later.');
+      setTrendingBooks([]);
+    } finally {
+      setIsLoadingTrending(false);
+    }
+  };
+
+  // Function to handle search with Google Books API
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+    
+    setIsSearching(true);
+    setError(null);
+    
+    try {
+      // Make actual Google Books API call
+      const response = await fetch(
+        `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(searchQuery)}&maxResults=20`
+      );
+      
+      if (!response.ok) {
+        throw new Error('Search failed');
+      }
+      
+      const data = await response.json();
+      
+      if (data.items && Array.isArray(data.items)) {
+        const books: Book[] = data.items.map((item: any) => ({
+          id: item.id,
+          title: item.volumeInfo.title || 'Unknown Title',
+          author: item.volumeInfo.authors ? item.volumeInfo.authors[0] : 'Unknown Author',
+          coverUrl: item.volumeInfo.imageLinks?.thumbnail || 'https://via.placeholder.com/128x192?text=No+Cover',
+        }));
+        
+        setSearchResults(books);
+      } else {
+        setSearchResults([]);
+      }
+    } catch (err) {
+      console.error('Error searching books:', err);
+      setError('An error occurred while searching. Please try again.');
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Navigate to book details when a book is clicked
+  const handleBookPress = (book: Book) => {
+    router.push(`/book-details/${book.id}`);
+  };
+
+  // Render book item as just the cover (Letterboxd style)
+  const renderBookItem = ({ item }: { item: Book }) => (
+    <TouchableOpacity 
+      style={styles.bookCoverContainer}
+      onPress={() => handleBookPress(item)}
+      activeOpacity={0.7}
+    >
+      <Image 
+        source={{ uri: item.coverUrl }} 
+        style={styles.bookCover} 
+        resizeMode="cover"
+      />
+    </TouchableOpacity>
+  );
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
+    <ThemedView style={styles.container}>
+      <StatusBar style="auto" />
+      
+      {/* Header */}
+      <View style={styles.header}>
+        <ThemedText type="title" style={styles.appTitle}>Kitab</ThemedText>
+      </View>
+      
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={[styles.searchInput, { color: Colors[colorScheme ?? 'light'].text }]}
+          placeholder="Search for books..."
+          placeholderTextColor={Colors[colorScheme ?? 'light'].muted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onSubmitEditing={handleSearch}
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12'
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          Tap the Explore tab to learn more about what's included in this starter app.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run{' '}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+        <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
+          <Ionicons 
+            name="search" 
+            size={24} 
+            color={Colors[colorScheme ?? 'light'].background} 
+          />
+        </TouchableOpacity>
+      </View>
+      
+      {/* Content */}
+      <View style={styles.content}>
+        {isSearching ? (
+          <ActivityIndicator size="large" color={Colors[colorScheme ?? 'light'].tint} />
+        ) : searchQuery && searchResults.length > 0 ? (
+          <>
+            <ThemedText type="subtitle" style={styles.sectionTitle}>Search Results</ThemedText>
+            <FlatList
+              data={searchResults}
+              renderItem={renderBookItem}
+              keyExtractor={item => item.id}
+              numColumns={3}
+              columnWrapperStyle={styles.bookRow}
+              contentContainerStyle={styles.bookGrid}
+            />
+          </>
+        ) : searchQuery && searchResults.length === 0 ? (
+          <ThemedText style={styles.noResults}>No books found. Try a different search.</ThemedText>
+        ) : error ? (
+          <ThemedText style={styles.errorText}>{error}</ThemedText>
+        ) : isLoadingTrending ? (
+          <ActivityIndicator size="large" color={Colors[colorScheme ?? 'light'].tint} />
+        ) : (
+          <>
+            <ThemedText type="subtitle" style={styles.sectionTitle}>Trending Books</ThemedText>
+            <FlatList
+              data={trendingBooks}
+              renderItem={renderBookItem}
+              keyExtractor={item => item.id}
+              numColumns={3}
+              columnWrapperStyle={styles.bookRow}
+              contentContainerStyle={styles.bookGrid}
+            />
+          </>
+        )}
+      </View>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: {
+    flex: 1,
+    paddingTop: 50, // Account for status bar
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+  },
+  appTitle: {
+    fontSize: 36,
+    marginBottom: 10,
+  },
+  searchContainer: {
     flexDirection: 'row',
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  searchInput: {
+    flex: 1,
+    height: 50,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    fontFamily: 'Merriweather-Regular',
+    fontSize: 16,
+  },
+  searchButton: {
+    width: 50,
+    height: 50,
+    backgroundColor: '#4CAF50',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    borderRadius: 8,
+    marginLeft: 10,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  content: {
+    flex: 1,
+    paddingHorizontal: 20,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  sectionTitle: {
+    marginBottom: 15,
+  },
+  bookGrid: {
+    paddingBottom: 20,
+  },
+  bookRow: {
+    justifyContent: 'space-between',
+    marginBottom: 15,
+  },
+  bookCoverContainer: {
+    width: '30%',
+    aspectRatio: 2/3,
+    borderRadius: 8,
+    overflow: 'hidden',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  bookCover: {
+    width: '100%',
+    height: '100%',
+  },
+  noResults: {
+    textAlign: 'center',
+    marginTop: 30,
+    opacity: 0.7,
+  },
+  errorText: {
+    textAlign: 'center',
+    marginTop: 30,
+    color: '#e74c3c',
   },
 });
