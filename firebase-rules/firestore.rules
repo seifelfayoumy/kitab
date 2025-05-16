@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow users to read their own profile
+    match /users/{userId} {
+      allow get, create, update, delete: if request.auth != null && request.auth.uid == userId;
+      // Allow anyone to list all users (for discovery features)
+      allow list: if request.auth != null;
+    }
+
+    // Book logs/reviews rules
+    match /logs/{logId} {
+      // Anyone can read logs
+      allow read: if true;
+      
+      // Only authenticated users can create logs
+      allow create: if request.auth != null;
+      
+      // Only the author can update or delete their logs
+      allow update, delete: if request.auth != null && 
+                             request.auth.uid == resource.data.userId;
+    }
+
+    // Bookshelf rules
+    match /bookshelves/{bookshelfId} {
+      // Anyone can read bookshelves
+      allow read: if true;
+      
+      // Only authenticated users can create bookshelves
+      allow create: if request.auth != null;
+      
+      // Only the owner can update or delete their bookshelves
+      allow update, delete: if request.auth != null && 
+                             request.auth.uid == resource.data.userId;
+    }
+  }
+} 

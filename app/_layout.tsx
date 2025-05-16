@@ -1,50 +1,72 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import React, { useEffect } from 'react';
+import { View, StyleSheet } from 'react-native';
+import { SplashScreen, Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { useFonts } from 'expo-font';
-import { Stack, useRouter, useSegments } from 'expo-router';
-import { FontProvider } from '@/contexts/FontContext';
-import * as SplashScreen from 'expo-splash-screen';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
-import 'react-native-reanimated';
 
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { FontProvider } from '@/contexts/FontContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { initializeFirebase } from '@/config/firebase';
+
+export {
+  // Catch any errors thrown by the Layout component.
+  ErrorBoundary,
+} from 'expo-router';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
-// Navigation guard component to handle authentication redirects
-function NavigationGuard({ children }: { children: React.ReactNode }) {
+// Handle navigation based on auth state
+function AuthNavigationProvider({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
-
+  const rootNavigationState = useRootNavigationState();
+  
   useEffect(() => {
-    if (!loading) {
-      // Check if the user is not authenticated and not already on the login screen
-      const inAuthGroup = segments[0] === 'auth';
-      
-      if (!user && !inAuthGroup) {
-        // Redirect to login if user is not authenticated and not in auth group
+    if (loading || !rootNavigationState?.key) return;
+    
+    const inAuthGroup = segments[0] === 'auth';
+    const currentRoute = segments.join('/');
+
+    // Handle routing based on auth state
+    if (!user) {
+      // User is not logged in and not on an auth screen
+      if (!inAuthGroup) {
         router.replace('/auth/login');
-      } else if (user && inAuthGroup) {
-        // If user is authenticated but still in auth group, redirect to home
+      }
+    } else {
+      // User is logged in
+      if (!user.displayName || !user.avatar) {
+        // User needs to create a profile
+        if (currentRoute !== 'auth/profile-creation') {
+          router.replace('/auth/profile-creation');
+        }
+      } else if (inAuthGroup) {
+        // User has complete profile but is on auth screen
         router.replace('/(tabs)');
       }
     }
-  }, [user, loading, segments]);
-
-  // Show nothing while checking authentication status
-  if (loading) return null;
+  }, [user, loading, segments, router, rootNavigationState?.key]);
 
   return <>{children}</>;
 }
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-  const [loaded] = useFonts({
+  const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
+
+  // Initialize Firebase when the app loads
+  useEffect(() => {
+    initializeFirebase();
+  }, []);
+
+  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
+  useEffect(() => {
+    if (error) throw error;
+  }, [error]);
 
   useEffect(() => {
     if (loaded) {
@@ -53,23 +75,25 @@ export default function RootLayout() {
   }, [loaded]);
 
   if (!loaded) {
-    return null;
+    return <View style={styles.container} />;
   }
 
   return (
-    <AuthProvider>
+    <SafeAreaProvider>
+      <StatusBar style="auto" />
       <FontProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <NavigationGuard>
-            <Stack>
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="auth" options={{ headerShown: false }} />
-              <Stack.Screen name="+not-found" />
-            </Stack>
-            <StatusBar style="auto" />
-          </NavigationGuard>
-        </ThemeProvider>
+        <AuthProvider>
+          <AuthNavigationProvider>
+            <Stack screenOptions={{ headerShown: false }} />
+          </AuthNavigationProvider>
+        </AuthProvider>
       </FontProvider>
-    </AuthProvider>
+    </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+});

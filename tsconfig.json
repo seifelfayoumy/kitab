@@ -1,3 +1,4 @@
+// @ts-check
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
@@ -12,6 +13,7 @@
     "**/*.ts",
     "**/*.tsx",
     ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "expo-env.d.ts",
+    "types/**/*.d.ts"
   ]
 }

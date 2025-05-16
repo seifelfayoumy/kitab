@@ -1,21 +1,28 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
+import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
 import { Alert, Platform } from 'react-native';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import appleAuth from '@invertase/react-native-apple-authentication';
+import { useRouter } from 'expo-router';
 
-type User = FirebaseAuthTypes.User & {
-  username?: string;
-};
+// Import from our config
+import { 
+  getAuth,
+  getFirestore,
+  getCollection,
+  COLLECTIONS, 
+  User as FirebaseUser,
+  GoogleAuthProvider,
+  AppleAuthProvider,
+  firestore, // for backward compatibility
+} from '@/config/firebase';
 
 type AuthContextType = {
-  user: User | null;
+  user: FirebaseUser | null;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   signInWithApple: () => Promise<void>;
   signOut: () => Promise<void>;
-  createUsername: (username: string) => Promise<boolean>;
+  createProfile: (displayName: string, avatar: string) => Promise<boolean>;
   checkUsernameExists: (username: string) => Promise<boolean>;
 };
 
@@ -25,276 +32,217 @@ const AuthContext = createContext<AuthContextType>({
   signInWithGoogle: async () => {},
   signInWithApple: async () => {},
   signOut: async () => {},
-  createUsername: async () => false,
+  createProfile: async () => false,
   checkUsernameExists: async () => false,
 });
 
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
-
+  const router = useRouter();
+  
+  // Handle user authentication state changes
   useEffect(() => {
-    // Subscribe to auth state changes
-    const unsubscribe = auth().onAuthStateChanged(async (firebaseUser) => {
-      if (firebaseUser) {
-        // Check if user has a username in Firestore
-        try {
-          const userDoc = await firestore().collection('users').doc(firebaseUser.uid).get();
+    const unsubscribe = getAuth().onAuthStateChanged(async (firebaseUser) => {
+      try {
+        if (firebaseUser) {
+          // User is signed in
+          const userDoc = await getCollection(COLLECTIONS.USERS)
+            .doc(firebaseUser.uid)
+            .get();
+          
           const userData = userDoc.data();
           
-          // Merge Firebase user with Firestore data
-          setUser({
-            ...firebaseUser,
-            username: userData?.username,
-          });
-        } catch (error) {
-          console.error('Error fetching user data:', error);
-          setUser(firebaseUser);
+          if (userData) {
+            // User has profile data
+            setUser({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: userData.displayName,
+              avatar: userData.avatar,
+              createdAt: userData.createdAt?.toDate() || new Date(),
+              bio: userData.bio,
+            });
+          } else {
+            // User is authenticated but has no profile
+            setUser({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: null,
+              avatar: null,
+              createdAt: new Date(),
+            });
+          }
+        } else {
+          // User is signed out
+          setUser(null);
         }
-      } else {
+      } catch (error) {
+        console.error('Error handling auth state change:', error);
+        // Reset user state on error
         setUser(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
+    // Cleanup subscription
     return unsubscribe;
   }, []);
 
-  // Initialize Google Sign-In and Apple Sign-In when the component mounts
-  useEffect(() => {
-    // Configure Google Sign-In
-    GoogleSignin.configure({
-      // Using the actual web client ID from GoogleService-Info.plist
-      webClientId: '678486496496-3td8npji90k790jp6e7k2jqvc5vilb42.apps.googleusercontent.com',
-      offlineAccess: true,
-    });
-    
-    // Check if Apple Authentication is available on this device
-    if (appleAuth.isSupported) {
-      console.log('Apple Authentication is supported on this device');
-    } else {
-      console.log('Apple Authentication is not supported on this device');
-    }
-  }, []);
-
   const signInWithGoogle = async () => {
+    if (loading) return;
+    
     try {
-      setLoading(true);
+      await GoogleSignin.hasPlayServices();
       
-      // Check if your device supports Google Play Services
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      console.log('Google Play Services check passed');
-      
-      // Sign out from any previous Google Sign-In to avoid token conflicts
-      await GoogleSignin.signOut();
-      console.log('Previous Google Sign-In cleared');
-      
-      // Perform the Google sign-in
-      console.log('Attempting Google sign-in...');
+      // Sign in with Google
       const signInResult = await GoogleSignin.signIn();
-      console.log('Google sign-in result:', signInResult);
+      const tokens = await GoogleSignin.getTokens();
       
-      // Extract idToken from the nested data structure
-      const { idToken } = signInResult.data;
-      
-      if (!idToken) {
-        console.error('No ID token in sign-in result:', signInResult);
-        throw new Error('Google Sign-In failed - no ID token returned');
+      if (!tokens.idToken) {
+        throw new Error('Failed to get Google ID token');
       }
       
-      console.log('ID token obtained successfully');
+      // Create a Google credential
+      const googleCredential = GoogleAuthProvider.credential(tokens.idToken);
       
-      // Create a Google credential with the token
-      const googleCredential = auth.GoogleAuthProvider.credential(idToken);
-      
-      // Sign in with credential to Firebase
-      const userCredential = await auth().signInWithCredential(googleCredential);
-      console.log('Firebase authentication successful');
-      
-      // Check if this is a new user
-      if (userCredential.additionalUserInfo?.isNewUser) {
-        // Create a new user document in Firestore
-        await firestore().collection('users').doc(userCredential.user.uid).set({
-          email: userCredential.user.email,
-          displayName: userCredential.user.displayName,
-          photoURL: userCredential.user.photoURL,
-          createdAt: firestore.FieldValue.serverTimestamp(),
-        });
-        console.log('New user created in Firestore');
-      }
+      // Sign in with credential
+      await getAuth().signInWithCredential(googleCredential);
     } catch (error: any) {
       console.error('Google sign in error:', error);
       
-      // More detailed error reporting
-      if (error.code) {
-        console.error(`Error code: ${error.code}`);
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        console.log('User cancelled the login flow');
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        console.log('Sign in already in progress');
+      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        Alert.alert('Error', 'Play services not available or outdated');
+      } else {
+        Alert.alert('Error', 'Failed to sign in with Google');
       }
-      
-      // Platform-specific error handling
-      if (Platform.OS === 'ios') {
-        console.error('iOS specific error details:', error);
-      } else if (Platform.OS === 'android') {
-        console.error('Android specific error details:', error);
-      }
-      
-      Alert.alert('Sign In Error', `Failed to sign in with Google: ${error.message || 'Unknown error'}`);
-    } finally {
-      setLoading(false);
     }
   };
 
   const signInWithApple = async () => {
-    // Check if Apple Authentication is supported on this device
-    if (!appleAuth.isSupported) {
-      Alert.alert('Error', 'Apple Authentication is not supported on this device');
+    if (loading) return;
+    
+    // Only available on iOS
+    if (!appleAuth.isSupported || Platform.OS !== 'ios') {
+      Alert.alert('Error', 'Apple authentication is only supported on iOS devices');
       return;
     }
 
     try {
-      setLoading(true);
-      console.log('Starting Apple Sign-In process...');
-      
-      // Perform the apple sign-in request
-      const appleAuthRequestResponse = await appleAuth.performRequest({
+      const appleAuthResponse = await appleAuth.performRequest({
         requestedOperation: appleAuth.Operation.LOGIN,
-        requestedScopes: [appleAuth.Scope.EMAIL, appleAuth.Scope.FULL_NAME],
+        requestedScopes: [appleAuth.Scope.FULL_NAME, appleAuth.Scope.EMAIL],
       });
-      console.log('Apple Auth Request completed');
-      
-      // Get the credential for Apple Sign In
-      const { identityToken, nonce } = appleAuthRequestResponse;
-      console.log('Identity token received:', identityToken ? 'Yes' : 'No');
-      
-      // Make sure we have an identity token
-      if (!identityToken) {
+
+      if (!appleAuthResponse.identityToken) {
         throw new Error('Apple Sign-In failed - no identity token returned');
       }
+
+      const { identityToken, nonce } = appleAuthResponse;
+      const appleCredential = AppleAuthProvider.credential(identityToken, nonce);
       
-      // Create a Firebase credential from the response
-      const appleCredential = auth.AppleAuthProvider.credential(identityToken, nonce);
-      console.log('Apple credential created');
-      
-      // Sign in with the credential
-      const userCredential = await auth().signInWithCredential(appleCredential);
-      console.log('Firebase authentication successful');
-      
-      // Get user information
-      const { fullName } = appleAuthRequestResponse;
-      let displayName = 'Apple User';
-      
-      // If we have a name from Apple, use it
-      if (fullName && (fullName.givenName || fullName.familyName)) {
-        displayName = `${fullName.givenName || ''} ${fullName.familyName || ''}`.trim();
-        console.log('Using name from Apple:', displayName);
-      }
-      
-      // Check if this is a new user
-      if (userCredential.additionalUserInfo?.isNewUser) {
-        console.log('Creating new user in Firestore');
-        // Create a new user document in Firestore
-        await firestore().collection('users').doc(userCredential.user.uid).set({
-          email: userCredential.user.email,
-          displayName: userCredential.user.displayName || displayName,
-          photoURL: userCredential.user.photoURL,
-          createdAt: firestore.FieldValue.serverTimestamp(),
-        });
-        console.log('New user created in Firestore');
-      }
+      await getAuth().signInWithCredential(appleCredential);
     } catch (error: any) {
       console.error('Apple sign in error:', error);
       
-      // More detailed error reporting
-      if (error.code) {
-        console.error(`Error code: ${error.code}`);
+      if (error.code === appleAuth.Error.CANCELED) {
+        console.log('User cancelled Apple Sign in');
+      } else {
+        Alert.alert('Error', 'Failed to sign in with Apple. Please try again.');
       }
-      
-      // Platform-specific error handling
-      if (Platform.OS === 'ios') {
-        console.error('iOS specific error details:', error);
-      } else if (Platform.OS === 'android') {
-        console.error('Android specific error details:', error);
-      }
-      
-      Alert.alert('Sign In Error', `Failed to sign in with Apple: ${error.message || 'Unknown error'}`);
-    } finally {
-      setLoading(false);
     }
   };
 
   const signOut = async () => {
+    if (loading) return;
+    
     try {
-      await auth().signOut();
-    } catch (error: any) {
+      // Sign out from Firebase
+      await getAuth().signOut();
+      
+      // Try to sign out from Google
+      try {
+        await GoogleSignin.signOut();
+      } catch (error) {
+        console.log('Google sign out error (non-critical):', error);
+      }
+      
+      console.log('User signed out successfully');
+    } catch (error) {
       console.error('Sign out error:', error);
-      Alert.alert('Error', error.message || 'Failed to sign out');
+      Alert.alert('Error', 'Failed to sign out. Please try again.');
+    }
+  };
+
+  const createProfile = async (displayName: string, avatar: string): Promise<boolean> => {
+    if (!user || loading) {
+      Alert.alert('Error', 'You must be logged in to create a profile');
+      return false;
+    }
+
+    try {
+      // Create user profile in Firestore
+      await getCollection(COLLECTIONS.USERS)
+        .doc(user.uid)
+        .set({
+          displayName,
+          avatar,
+          email: user.email,
+          createdAt: firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+      // Update local user state
+      setUser(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          displayName,
+          avatar,
+        };
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Error creating profile:', error);
+      Alert.alert('Error', 'Failed to create profile. Please try again.');
+      return false;
     }
   };
 
   const checkUsernameExists = async (username: string): Promise<boolean> => {
     try {
-      const snapshot = await firestore()
-        .collection('usernames')
-        .doc(username.toLowerCase())
+      const querySnapshot = await getCollection(COLLECTIONS.USERS)
+        .where('displayName', '==', username)
+        .limit(1)
         .get();
-      
-      return snapshot.exists;
+
+      return !querySnapshot.empty;
     } catch (error) {
       console.error('Error checking username:', error);
-      return false;
+      throw error;
     }
   };
 
-  const createUsername = async (username: string): Promise<boolean> => {
-    if (!user) return false;
-    
-    try {
-      const usernameExists = await checkUsernameExists(username);
-      
-      if (usernameExists) {
-        Alert.alert('Username taken', 'Please choose another username');
-        return false;
-      }
-      
-      // Create a batch to ensure both operations succeed or fail together
-      const batch = firestore().batch();
-      
-      // Add username to user document
-      const userRef = firestore().collection('users').doc(user.uid);
-      batch.set(userRef, { username }, { merge: true });
-      
-      // Reserve the username in a separate collection for uniqueness
-      const usernameRef = firestore().collection('usernames').doc(username.toLowerCase());
-      batch.set(usernameRef, { uid: user.uid });
-      
-      await batch.commit();
-      
-      // Update local user state
-      setUser(currentUser => {
-        if (currentUser) {
-          return { ...currentUser, username };
-        }
-        return currentUser;
-      });
-      
-      return true;
-    } catch (error) {
-      console.error('Error creating username:', error);
-      Alert.alert('Error', 'Failed to create username. Please try again.');
-      return false;
-    }
-  };
-
-  const value = {
-    user,
-    loading,
-    signInWithGoogle,
-    signInWithApple,
-    signOut,
-    createUsername,
-    checkUsernameExists,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        signInWithGoogle,
+        signInWithApple,
+        signOut,
+        createProfile,
+        checkUsernameExists,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 };

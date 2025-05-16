@@ -1,74 +1,45 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, TouchableOpacity, Image, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import React from 'react'; // Keep useState if needed elsewhere, remove if not
+import { StyleSheet, View, TouchableOpacity, Image, ActivityIndicator, Platform } from 'react-native'; // Remove TextInput, KeyboardAvoidingView if not used
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+// Import Colors if needed for styles, otherwise remove
+import { Colors } from '@/constants/Colors'; 
 
 export default function LoginScreen() {
-  const { user, loading, signInWithGoogle, signInWithApple, createUsername, checkUsernameExists } = useAuth();
-  const [username, setUsername] = useState('');
-  const [usernameError, setUsernameError] = useState('');
-  const [isCheckingUsername, setIsCheckingUsername] = useState(false);
-  const [showUsernameInput, setShowUsernameInput] = useState(false);
+  // Remove createUsername, checkUsernameExists, and related state
+  const { user, loading, signInWithGoogle, signInWithApple } = useAuth(); 
+  // Remove username, setUsername, usernameError, setUsernameError, isCheckingUsername, setIsCheckingUsername, showUsernameInput, setShowUsernameInput
 
-  // If user is already logged in but doesn't have a username, show username input
-  React.useEffect(() => {
-    if (user && !user.username) {
-      setShowUsernameInput(true);
-    } else if (user && user.username) {
-      // User is fully authenticated with username, redirect to home
-      router.replace('/(tabs)');
-    }
-  }, [user]);
+  // Remove the useEffect hook as redirection is now handled in AuthContext
+  // React.useEffect(() => {
+  //   if (user) {
+  //     console.log('Login screen - User state:', { hasUsername: !!user.username, hasAvatar: !!user.avatar });
+      
+  //     // Redirect to profile creation if username OR avatar is missing
+  //     if (!user.username || !user.avatar) { 
+  //       console.log('Redirecting to profile creation - missing username or avatar');
+  //       router.replace('/auth/profile-creation');
+  //     } else {
+  //       // User is fully authenticated with username and avatar, redirect to home
+  //       console.log('Redirecting to home - user has username and avatar');
+  //       router.replace('/(tabs)');
+  //     }
+  //   }
+  // }, [user, router]);
 
   const handleGoogleSignIn = async () => {
     await signInWithGoogle();
+    // Navigation is handled by the useEffect hook based on user state changes
   };
 
   const handleAppleSignIn = async () => {
     await signInWithApple();
+    // Navigation is handled by the useEffect hook based on user state changes
   };
 
-  const handleUsernameSubmit = async () => {
-    if (!username.trim()) {
-      setUsernameError('Username cannot be empty');
-      return;
-    }
-
-    if (username.length < 3) {
-      setUsernameError('Username must be at least 3 characters');
-      return;
-    }
-
-    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-      setUsernameError('Username can only contain letters, numbers, and underscores');
-      return;
-    }
-
-    setIsCheckingUsername(true);
-    setUsernameError('');
-
-    try {
-      const exists = await checkUsernameExists(username);
-      if (exists) {
-        setUsernameError('This username is already taken');
-        setIsCheckingUsername(false);
-        return;
-      }
-
-      const success = await createUsername(username);
-      if (success) {
-        // Username created successfully, navigate to home
-        router.replace('/(tabs)');
-      }
-    } catch (error) {
-      console.error('Error creating username:', error);
-      setUsernameError('An error occurred. Please try again.');
-    } finally {
-      setIsCheckingUsername(false);
-    }
-  };
+  // Remove handleUsernameSubmit function entirely
 
   if (loading) {
     return (
@@ -79,44 +50,7 @@ export default function LoginScreen() {
     );
   }
 
-  if (showUsernameInput) {
-    return (
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}>
-        <ThemedView style={styles.usernameContainer}>
-          <ThemedText type="title" style={styles.title}>Create Username</ThemedText>
-          <ThemedText style={styles.subtitle}>
-            Choose a unique username for your Kitab account
-          </ThemedText>
-          
-          <TextInput
-            style={styles.usernameInput}
-            placeholder="Username"
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          
-          {usernameError ? (
-            <ThemedText style={styles.errorText}>{usernameError}</ThemedText>
-          ) : null}
-          
-          <TouchableOpacity 
-            style={styles.submitButton} 
-            onPress={handleUsernameSubmit}
-            disabled={isCheckingUsername}>
-            {isCheckingUsername ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <ThemedText style={styles.submitButtonText}>Continue</ThemedText>
-            )}
-          </TouchableOpacity>
-        </ThemedView>
-      </KeyboardAvoidingView>
-    );
-  }
+  // Remove the entire 'if (showUsernameInput)' block
 
   return (
     <ThemedView style={styles.container}>
@@ -158,8 +92,12 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    padding: 20,
+    // Adjusted padding and justification for the main login view
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    padding: 30,
+    paddingTop: 80, 
+    paddingBottom: 50,
   },
   loadingContainer: {
     flex: 1,
@@ -171,105 +109,88 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 50,
+    // Adjusted margin for better spacing
+    marginBottom: 40, 
   },
   logo: {
-    width: 100,
-    height: 100,
-    marginBottom: 10,
+    // Slightly larger logo
+    width: 120,
+    height: 120,
+    marginBottom: 15,
   },
   appName: {
-    fontSize: 36,
+    fontSize: 32, // Adjusted size
     fontWeight: 'bold',
-    marginBottom: 8,
+    marginBottom: 5, // Adjusted margin
   },
   tagline: {
     fontSize: 16,
-    opacity: 0.7,
+    // Use a secondary color for better hierarchy
+    color: Colors.light.textSecondary, 
+    opacity: 1, // Remove opacity if using direct color
   },
   buttonContainer: {
     width: '100%',
-    marginBottom: 20,
+    alignItems: 'center', // Center buttons horizontally
+    marginBottom: 20, // Keep margin
   },
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#FFFFFF', // Google's white
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 25, // Rounded corners
+    marginBottom: 15,
+    width: '90%', // Button width
     justifyContent: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
+    // Shadow for depth (iOS)
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 2,
+    // Elevation for depth (Android)
+    elevation: 3,
   },
   appleButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#000000', // Apple's black
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 25, // Rounded corners
+    width: '90%', // Button width
     justifyContent: 'center',
-    backgroundColor: '#000',
-    borderRadius: 8,
-    padding: 16,
+    // Shadow for depth (iOS)
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    // Elevation for depth (Android)
+    elevation: 3,
   },
   buttonIcon: {
-    width: 24,
-    height: 24,
-    marginRight: 12,
+    width: 20, // Adjusted icon size
+    height: 20,
+    marginRight: 15, // Space between icon and text
   },
   buttonText: {
+    color: '#757575', // Google's grey text color
+    fontWeight: '500',
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
   },
   appleButtonText: {
+    color: '#FFFFFF', // White text for Apple button
+    fontWeight: '500',
     fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
   },
   termsText: {
-    textAlign: 'center',
     fontSize: 12,
-    opacity: 0.6,
-  },
-  usernameContainer: {
-    padding: 20,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  title: {
-    marginBottom: 10,
+    color: Colors.light.textSecondary, // Use secondary color
     textAlign: 'center',
+    marginTop: 20, // Add margin above terms text
+    opacity: 1, // Remove opacity if using direct color
   },
-  subtitle: {
-    textAlign: 'center',
-    marginBottom: 30,
-    opacity: 0.7,
-  },
-  usernameInput: {
-    width: '100%',
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 15,
-    fontSize: 16,
-    marginBottom: 15,
-  },
-  errorText: {
-    color: 'red',
-    marginBottom: 15,
-  },
-  submitButton: {
-    backgroundColor: '#0a7ea4',
-    borderRadius: 8,
-    padding: 16,
-    width: '100%',
-    alignItems: 'center',
-  },
-  submitButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  // Remove styles related to the username input form: 
+  // usernameContainer, title, subtitle, usernameInput, errorText, submitButton, submitButtonText
 });
